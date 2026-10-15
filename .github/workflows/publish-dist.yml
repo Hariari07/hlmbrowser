@@ -1,6 +1,4 @@
 name: Publish distribution packages
-on:
-  workflow_dispatch:
 permissions:
   contents: write
 concurrency:
@@ -11,110 +9,215 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: 6dedeec2e26f2a869fb74c71d8ee72ac84b1e1db
-          persist-credentials: false
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-          cache: npm
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Install build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nsis xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64
-          npm ci --no-audit --no-fund
-          node node_modules/electron/install.js
-          sudo chown root:root node_modules/electron/dist/chrome-sandbox
-          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
-      - name: Validate desktop source
-        run: |
-          npm test
-          set +e
-          xvfb-run -a npm run test:desktop > "$RUNNER_TEMP/desktop-fixture.log" 2>&1
-          result=$?
-          cat "$RUNNER_TEMP/desktop-fixture.log"
-          if [ "$result" -ne 0 ]; then
-            python3 -c 'import os,pathlib; text=(pathlib.Path(os.environ["RUNNER_TEMP"])/"desktop-fixture.log").read_text()[-8000:]; print("::error title=Desktop fixture failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
-          fi
-          exit "$result"
-      - name: Build Linux packages
-        run: npm run dist:linux
-      - name: Verify packaged Linux application
-        run: |
-          sudo chown root:root dist/linux-unpacked/chrome-sandbox
-          sudo chmod 4755 dist/linux-unpacked/chrome-sandbox
-          xvfb-run -a node scripts/packaged-smoke.cjs "$PWD/dist/linux-unpacked/hlm-browser"
-      - name: Build Windows application
-        run: npx electron-builder --win --dir
-      - name: Build Windows installer
-        run: makensis -WX -V2 "-DAPP_DIR=$PWD/dist/win-unpacked" "-DOUTPUT_FILE=$PWD/dist/HLM Browser Setup 1.1.0.exe" scripts/windows-installer.nsi
-      - name: Build unsigned Intel macOS package
-        run: npx electron-builder --mac zip --x64
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Prepare verified Android SDK
-        run: |
-          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o "$RUNNER_TEMP/android-cli.zip"
-          echo "7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee  $RUNNER_TEMP/android-cli.zip" | sha256sum -c -
-          export ANDROID_HOME="$RUNNER_TEMP/hlm-android-sdk"
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          unzip -q "$RUNNER_TEMP/android-cli.zip" -d "$ANDROID_HOME/cmdline-tools"
-          mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          python3 - <<'PYLICENSE'
-          import os, subprocess
-          command = os.environ['ANDROID_HOME'] + '/cmdline-tools/latest/bin/sdkmanager'
-          subprocess.run([command, '--licenses'], input='y\n' * 100, text=True, stdout=subprocess.DEVNULL, check=True)
-          subprocess.run([command, 'platforms;android-35', 'build-tools;35.0.0'], check=True)
-          PYLICENSE
-      - name: Build and validate Android packages
-        run: |
-          cd android
-          ./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain
-      - name: Assemble distribution assets
-        run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk dist/HLM-Browser-1.1.0-debug.apk
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/HLM-Browser-1.1.0-release-unsigned.apk
-          python3 - <<'PY'
-          import pathlib, subprocess, zipfile, hashlib
-          with zipfile.ZipFile('dist/HLM-Browser-1.1.0-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
-              for name in subprocess.check_output(['git','ls-files','-z']).decode().split('\0'):
-                  if name: archive.write(name, 'hlmbrowser/' + name)
-          files = sorted(p for p in pathlib.Path('dist').iterdir() if '1.1.0' in p.name and p.suffix in {'.exe','.AppImage','.deb','.zip','.apk'})
-          assert len(files) == 7, files
-          with open('dist/SHA256SUMS-1.1.0', 'w') as output:
-              for path in files:
-                  with path.open('rb') as source: digest = hashlib.file_digest(source, 'sha256').hexdigest()
-                  output.write(digest + '  ' + path.name + '\n')
-          PY
-          cd dist
-          sha256sum -c SHA256SUMS-1.1.0
-      - uses: actions/upload-artifact@v4
-        with:
-          name: hlm-browser-1.1.0-distributions
-          path: |
-            dist/*1.1.0*.exe
-            dist/*1.1.0*.AppImage
-            dist/*1.1.0*.deb
-            dist/*1.1.0*.zip
-            dist/*1.1.0*.apk
-            dist/SHA256SUMS-1.1.0
-      - name: Upload and publish development prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload v1.1.0 --repo "$GITHUB_REPOSITORY" --clobber \
-            'dist/HLM Browser Setup 1.1.0.exe' \
-            'dist/HLM Browser-1.1.0.AppImage' \
-            dist/hlm-browser_1.1.0_amd64.deb \
-            'dist/HLM Browser-1.1.0-mac.zip' \
-            dist/HLM-Browser-1.1.0-debug.apk \
-            dist/HLM-Browser-1.1.0-release-unsigned.apk \
-            dist/HLM-Browser-1.1.0-source.zip \
-            dist/SHA256SUMS-1.1.0
-          gh release edit v1.1.0 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+    - uses: actions/checkout@v5
+      with:
+        ref: 6dedeec2e26f2a869fb74c71d8ee72ac84b1e1db
+        persist-credentials: false
+    - uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+        cache: npm
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+    - name: Install build prerequisites
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        sudo apt-get update
+        sudo apt-get install -y nsis xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64
+        npm ci --no-audit --no-fund
+        node node_modules/electron/install.js
+        sudo chown root:root node_modules/electron/dist/chrome-sandbox
+        sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+    - name: Validate desktop source
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        npm test
+        set +e
+        xvfb-run -a npm run test:desktop > "$RUNNER_TEMP/desktop-fixture.log" 2>&1
+        result=$?
+        cat "$RUNNER_TEMP/desktop-fixture.log"
+        if [ "$result" -ne 0 ]; then
+          python3 -c 'import os,pathlib; text=(pathlib.Path(os.environ["RUNNER_TEMP"])/"desktop-fixture.log").read_text()[-8000:]; print("::error title=Desktop fixture failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+        fi
+        exit "$result"
+    - name: Build Linux packages
+      run: |-
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        npm run dist:linux
+    - name: Verify packaged Linux application
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        sudo chown root:root dist/linux-unpacked/chrome-sandbox
+        sudo chmod 4755 dist/linux-unpacked/chrome-sandbox
+        xvfb-run -a node scripts/packaged-smoke.cjs "$PWD/dist/linux-unpacked/hlm-browser"
+    - name: Build Windows application
+      run: |-
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        npx electron-builder --win --dir
+    - name: Build Windows installer
+      run: |-
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        makensis -WX -V2 "-DAPP_DIR=$PWD/dist/win-unpacked" "-DOUTPUT_FILE=$PWD/dist/HLM Browser Setup 1.1.0.exe" scripts/windows-installer.nsi
+    - name: Build unsigned Intel macOS package
+      run: |-
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        npx electron-builder --mac zip --x64
+      env:
+        CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    - name: Prepare verified Android SDK
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip -o "$RUNNER_TEMP/android-cli.zip"
+        echo "7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee  $RUNNER_TEMP/android-cli.zip" | sha256sum -c -
+        export ANDROID_HOME="$RUNNER_TEMP/hlm-android-sdk"
+        mkdir -p "$ANDROID_HOME/cmdline-tools"
+        unzip -q "$RUNNER_TEMP/android-cli.zip" -d "$ANDROID_HOME/cmdline-tools"
+        mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+        echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+        python3 - <<'PYLICENSE'
+        import os, subprocess
+        command = os.environ['ANDROID_HOME'] + '/cmdline-tools/latest/bin/sdkmanager'
+        subprocess.run([command, '--licenses'], input='y\n' * 100, text=True, stdout=subprocess.DEVNULL, check=True)
+        subprocess.run([command, 'platforms;android-35', 'build-tools;35.0.0'], check=True)
+        PYLICENSE
+    - name: Build and validate Android packages
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        cd android
+        ./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain
+    - name: Assemble distribution assets
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        cp android/app/build/outputs/apk/debug/app-debug.apk dist/HLM-Browser-1.1.0-debug.apk
+        cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/HLM-Browser-1.1.0-release-unsigned.apk
+        python3 - <<'PY'
+        import pathlib, subprocess, zipfile, hashlib
+        with zipfile.ZipFile('dist/HLM-Browser-1.1.0-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+            for name in subprocess.check_output(['git','ls-files','-z']).decode().split('\0'):
+                if name: archive.write(name, 'hlmbrowser/' + name)
+        files = sorted(p for p in pathlib.Path('dist').iterdir() if '1.1.0' in p.name and p.suffix in {'.exe','.AppImage','.deb','.zip','.apk'})
+        assert len(files) == 7, files
+        with open('dist/SHA256SUMS-1.1.0', 'w') as output:
+            for path in files:
+                with path.open('rb') as source: digest = hashlib.file_digest(source, 'sha256').hexdigest()
+                output.write(digest + '  ' + path.name + '\n')
+        PY
+        cd dist
+        sha256sum -c SHA256SUMS-1.1.0
+    - uses: actions/upload-artifact@v4
+      with:
+        name: hlm-browser-1.1.0-distributions
+        path: |
+          dist/*1.1.0*.exe
+          dist/*1.1.0*.AppImage
+          dist/*1.1.0*.deb
+          dist/*1.1.0*.zip
+          dist/*1.1.0*.apk
+          dist/SHA256SUMS-1.1.0
+    - name: Upload and publish development prerelease
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -Eeuo pipefail
+        build_log="$RUNNER_TEMP/hlm-publish-step.log"
+        exec > >(tee "$build_log") 2>&1
+        annotate_failure() {
+          failure_status=$?
+          HLM_BUILD_LOG="$build_log" python3 -c 'import os,pathlib; text=pathlib.Path(os.environ["HLM_BUILD_LOG"]).read_text(errors="replace")[-8000:]; print("::error title=Distribution step failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          exit "$failure_status"
+        }
+        trap annotate_failure ERR
+        gh release upload v1.1.0 --repo "$GITHUB_REPOSITORY" --clobber \
+          'dist/HLM Browser Setup 1.1.0.exe' \
+          'dist/HLM Browser-1.1.0.AppImage' \
+          dist/hlm-browser_1.1.0_amd64.deb \
+          'dist/HLM Browser-1.1.0-mac.zip' \
+          dist/HLM-Browser-1.1.0-debug.apk \
+          dist/HLM-Browser-1.1.0-release-unsigned.apk \
+          dist/HLM-Browser-1.1.0-source.zip \
+          dist/SHA256SUMS-1.1.0
+        gh release edit v1.1.0 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+'on':
+  workflow_dispatch: null
