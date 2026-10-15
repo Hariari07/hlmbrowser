@@ -1,0 +1,28 @@
+# Validation and acceptance checklist
+
+Automated desktop tests use disposable local fixture origins, never production credentials. `npm test` covers URL validation, credentials/scheme rejection, origin matching, WebSocket origin mapping, removed origins, password verification, atomic file replacement, persistence and corruption. `npm run test:desktop` launches the real app and verifies setup, website loading, restart, native settings authorization, confirmed replacement (dialog response stubbed), in-app routes, blocked external links/pop-ups/redirects/resources, no website IPC/Node bridge, full-screen switching and network-error UI. No zero-test result counts as validation.
+
+`node scripts/packaged-smoke.cjs /absolute/path/to/hlm-browser` tests the packaged Linux executable with local fixtures and an isolated profile. It verifies first-run setup, website loading, blocked resource requests, renderer isolation and restart persistence. Both desktop test paths keep Chromium sandboxing enabled. The cloud's nested command sandbox blocks Chromium's namespace setup, so final passing runs used the supported execution approval route outside that nested sandbox. Earlier tests using Playwright's default disabled sandbox were superseded by these passing sandbox-enabled checks.
+
+Android's six pure-Java policy tests run with `cd android && ./gradlew :app:testDebugUnitTest`. Actual WebView and OS behavior still requires device/emulator testing. The CI workflow has been added but has not been executed on GitHub.
+
+The desktop fixture also exercises persistent cookies/local storage after restart, an approved cross-origin sign-in window with `window.opener` preserved, nested unapproved popup blocking, admin revocation of pop-up permission, multipart file upload, and HTTP/Blob downloads with a stubbed native save destination. Hardware capture and actual OS consent dialogs are not covered by this fixture.
+
+## Manual release gate — run on each supported platform
+
+- Fresh install: setup appears, rejects malformed/insecure URL and short admin password. HTTP works only after opt-in. Configure a staging site; no frontend changes needed.
+- Restart and reboot: saved site opens automatically. Disabling auto-open presents the open screen. Verify preferences after in-place upgrade.
+- Administrator: ordinary users cannot save settings; wrong password fails; rate limiting works. Cancel replacement leaves old configuration intact. Confirm replacement opens the new site; restart retains it. Corrupt settings fail closed; OS-authorized recovery works.
+- Policy: test external link, redirect, iframe, meta refresh, form action, JavaScript location, window.open, image/script/fetch, WebSocket, service worker, file/data/blob URL and external protocol attempts. Check unapproved server access logs. Add a new origin, verify it works; remove it, verify it stops after restart and cache/session clearing. Record engine-specific gaps, especially Android. Test public and private network addresses and different ports.
+- Real website: inventory API/CDN/authentication origins, normal and cross-site login/logout, cookies, storage, refresh, SPA routes, form submissions and reconnect behavior. Opener-dependent pop-ups, third-party cookies and embedded authentication require explicit review.
+- Files: upload a user-selected file, cancel chooser, test multiple files and MIME restrictions. Desktop downloads must require save approval and never auto-open. Android downloads require device testing, including redirects, authenticated cookies and cancellation.
+- Printing: invoke Print on an authenticated page; verify OS printer/PDF dialog and cancellation. No actual printer has been tested in cloud.
+- Media: default-off, wrong-origin and HTTP requests must be denied. Enable only camera, only microphone, then both through IT settings; confirm HTTPS capture and native/OS consent. Test denial/cancellation, revoked OS permission, page navigation during a prompt and IT revocation. Verify the HTTP LAN page is still ineligible for capture. Test Android popup capture and macOS signed privacy prompts on actual devices.
+- Display: desktop resize/maximize/minimize/restore; full-screen toggle and exit. Android phone/tablet, touch, portrait/landscape, keyboard, system bars, background/resume and OS process death.
+- Failure: offline startup, broken DNS, connection refused, HTTP 4xx/5xx, invalid TLS certificate, crashed renderer. Retry should recover when service returns; settings must remain accessible. TLS errors must never offer a bypass.
+- Packaging: install, launch, shortcuts, uninstall/reinstall behavior, signed upgrades, signature verification and saved settings. Linux AppImage with/without FUSE; DEB on a clean supported distro; Windows NSIS; macOS Gatekeeper; Android debug and signed release install.
+- Kiosk deployment: verify OS management prevents users modifying the profile, clearing app data, opening alternate browsers or escaping the managed session. App full screen alone does not satisfy OS lockdown.
+
+## Outstanding full-specification gates
+
+The supplied website is http://192.168.0.127:4200/fbs; the cloud proxy returned 403, so actual-site behavior remains unverified. Authentication/API/CDN origins are still unspecified. Windows/macOS native execution, signing/notarization, Android emulator/device behavior and actual upgrade installation have not been validated here. Android strict origin/network enforcement still needs additional controls; native media, pop-ups and downloads require device qualification. Do not interpret a generated artifact or passing desktop fixture as completing these gates.

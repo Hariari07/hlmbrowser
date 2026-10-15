@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<title>HLM Browser</title><link rel="stylesheet" href="shell.css"></head>
+<body><header><strong>HLM <span>Browser</span></strong><span id="status" role="status"></span><nav><button data-action="settings">Settings</button><button data-action="fullscreen">Full screen</button><button data-action="print">Print</button><button data-action="exit">Exit</button></nav></header>
+<main id="panel">
+<section id="welcome" hidden><h1>Your application, ready.</h1><p>Open the website configured by your administrator.</p><button data-action="open">Open application</button></section>
+<section id="recovery" hidden><h1>Settings need recovery</h1><p>The saved settings cannot be validated. HLM Browser has blocked website access.</p><p>An OS administrator must back up and repair or remove settings.json in the application user-data directory. Removing it requires setting up a new administrator password and website.</p></section>
+<section id="error" hidden><h1>Unable to open your application</h1><p id="failure"></p><button data-action="retry">Try again</button><button data-action="settings">Settings</button></section>
+<section id="locked" hidden><h1>Administrator settings</h1><p>Enter the administrator password to change this device’s configuration.</p><form id="unlock"><label>Password<input id="password" type="password" autocomplete="current-password" maxlength="256" required></label><button>Unlock settings</button></form><button data-action="open">Return to application</button></section>
+<section id="setup" hidden><p class="eyebrow">DEVELOPER / IT CONFIGURATION</p><h1 id="setup-title">Welcome to HLM Browser</h1><p>Developer or IT staff must provision this device before handing it to end users. Choose the application this device can access and retain the administrator password.</p>
+<form id="configuration"><label>Website URL<input id="website" type="url" placeholder="https://your-application.example" required maxlength="4096"></label>
+<label>Additional approved origins, one per line<textarea id="origins" rows="4" placeholder="https://identity.example&#10;https://api.example"></textarea></label><small>Include required authentication, API, CDN and WebSocket origins. Subdomains and ports must be approved separately; wildcards are not accepted.</small>
+<label class="check"><input id="allowHttp" type="checkbox">Allow HTTP for trusted internal or development sites</label>
+<fieldset><legend>IT-approved application capabilities</legend>
+<label class="check"><input id="camera" type="checkbox">Allow camera on approved HTTPS origins</label>
+<label class="check"><input id="microphone" type="checkbox">Allow microphone on approved HTTPS origins</label>
+<label class="check"><input id="popups" type="checkbox">Allow application and sign-in pop-up windows on approved origins</label>
+<small>Camera and microphone require HTTPS and OS permission. Enabling trusted HTTP does not change that requirement. First setup must be performed by developer/IT staff; retain the administrator password.</small></fieldset>
+<label class="check"><input id="fullscreen" type="checkbox">Start in full screen</label><label class="check"><input id="autoOpen" type="checkbox" checked>Open application automatically on launch</label>
+<label id="new-admin-label">Create administrator password (at least 12 characters)<input id="new-admin" type="password" autocomplete="new-password" minlength="12" maxlength="256"></label>
+<p class="notice">First setup claims administration for this OS user. Use OS account controls or managed kiosk deployment to prevent local tampering. Keep the administrator password safe.</p><button id="save">Save and open application</button></form></section>
+<p id="feedback" role="alert"></p></main><script src="shell.js"></script></body></html>
