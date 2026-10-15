@@ -27,3 +27,7 @@ makensis -WX -V2 \
 ```
 
 NSIS 3.0.4.1 from Electron Builder's checksum-verified tool cache was used for the cloud artifact. The standalone script installs to a fixed per-user directory, writes shortcuts and the uninstall registry entry, leaves the profile intact and offers optional launch. Close the application before installing/upgrading. Keep its version fields synchronized with package.json for future releases. Native Windows installation, upgrade, uninstall and Authenticode verification remain release gates. The CI workflow builds the normal Electron Builder installer on Windows instead.
+
+## Repository distribution files
+
+Selected 1.1.0 packages are stored in `dist/` through Git LFS, alongside checksums and update metadata. Install Git LFS, clone the repository and run `git lfs pull` to obtain binary contents instead of LFS pointer files. GitHub's file download UI also resolves LFS objects. Verify the packages with `cd dist && sha256sum -c SHA256SUMS-1.1.0`. Keep dependencies, caches, old build outputs and unpacked engine folders out of source control. Future source archives should exclude `dist/` to avoid packaging distributions recursively.

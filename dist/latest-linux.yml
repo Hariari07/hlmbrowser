@@ -1,0 +1,12 @@
+version: 1.1.0
+files:
+  - url: HLM-Browser-1.1.0.AppImage
+    sha512: M1is6JoLYMXtHqpMDhggL4GHQMJenaGQjKAkZVUvzWFThsGJSDFhixypkq9x9BA5D99lGdHIe36Blvz6R25ucg==
+    size: 124948599
+    blockMapSize: 131211
+  - url: hlm-browser_1.1.0_amd64.deb
+    sha512: bHBnaES6NcSvE5tFlUpbqg9hW14gLS/RlraTwaUFGf3lxaqf/x24O4e67y+gKvHDGDkFeANWlkxXr7F2INx2mQ==
+    size: 99482200
+path: HLM-Browser-1.1.0.AppImage
+sha512: M1is6JoLYMXtHqpMDhggL4GHQMJenaGQjKAkZVUvzWFThsGJSDFhixypkq9x9BA5D99lGdHIe36Blvz6R25ucg==
+releaseDate: '2026-10-15T08:39:25.189Z'

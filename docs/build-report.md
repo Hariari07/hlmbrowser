@@ -2,7 +2,7 @@
 
 ## Produced
 
-All outputs are under `dist/` and ignored by Git:
+Outputs are under `dist/`. Selected version 1.1.0 distribution packages are tracked through Git LFS, with checksums and update metadata in Git. Older builds and unpacked build working directories remain ignored:
 
 | Artifact | Qualification |
 |---|---|
