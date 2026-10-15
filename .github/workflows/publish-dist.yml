@@ -34,7 +34,14 @@ jobs:
       - name: Validate desktop source
         run: |
           npm test
-          xvfb-run -a npm run test:desktop
+          set +e
+          xvfb-run -a npm run test:desktop > "$RUNNER_TEMP/desktop-fixture.log" 2>&1
+          result=$?
+          cat "$RUNNER_TEMP/desktop-fixture.log"
+          if [ "$result" -ne 0 ]; then
+            python3 -c 'import os,pathlib; text=(pathlib.Path(os.environ["RUNNER_TEMP"])/"desktop-fixture.log").read_text()[-8000:]; print("::error title=Desktop fixture failure::"+text.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+          fi
+          exit "$result"
       - name: Build Linux packages
         run: npm run dist:linux
       - name: Verify packaged Linux application
