@@ -1,0 +1,94 @@
+name: Publish distribution packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: publish-hlm-dist
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6dedeec2e26f2a869fb74c71d8ee72ac84b1e1db
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64
+          npm ci --no-audit --no-fund
+          node node_modules/electron/install.js
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - name: Validate desktop source
+        run: |
+          npm test
+          xvfb-run -a npm run test:desktop
+      - name: Build Linux and Windows packages
+        run: |
+          npm run dist:linux
+          xvfb-run -a node scripts/packaged-smoke.cjs "$PWD/dist/linux-unpacked/hlm-browser"
+          npx electron-builder --win --dir
+          makensis -WX -V2 "-DAPP_DIR=$PWD/dist/win-unpacked" "-DOUTPUT_FILE=$PWD/dist/HLM Browser Setup 1.1.0.exe" scripts/windows-installer.nsi
+      - name: Build unsigned Intel macOS package
+        run: npx electron-builder --mac zip --x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Build and validate Android packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          cd android
+          ./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain
+      - name: Assemble distribution assets
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/HLM-Browser-1.1.0-debug.apk
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/HLM-Browser-1.1.0-release-unsigned.apk
+          python3 - <<'PY'
+          import pathlib, subprocess, zipfile, hashlib
+          with zipfile.ZipFile('dist/HLM-Browser-1.1.0-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in subprocess.check_output(['git','ls-files','-z']).decode().split('\0'):
+                  if name: archive.write(name, 'hlmbrowser/' + name)
+          files = sorted(p for p in pathlib.Path('dist').iterdir() if '1.1.0' in p.name and p.suffix in {'.exe','.AppImage','.deb','.zip','.apk'})
+          assert len(files) == 7, files
+          with open('dist/SHA256SUMS-1.1.0', 'w') as output:
+              for path in files:
+                  with path.open('rb') as source: digest = hashlib.file_digest(source, 'sha256').hexdigest()
+                  output.write(digest + '  ' + path.name + '\n')
+          PY
+          cd dist
+          sha256sum -c SHA256SUMS-1.1.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hlm-browser-1.1.0-distributions
+          path: |
+            dist/*1.1.0*.exe
+            dist/*1.1.0*.AppImage
+            dist/*1.1.0*.deb
+            dist/*1.1.0*.zip
+            dist/*1.1.0*.apk
+            dist/SHA256SUMS-1.1.0
+      - name: Upload and publish development prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v1.1.0 --repo "$GITHUB_REPOSITORY" --clobber \
+            'dist/HLM Browser Setup 1.1.0.exe' \
+            'dist/HLM Browser-1.1.0.AppImage' \
+            dist/hlm-browser_1.1.0_amd64.deb \
+            'dist/HLM Browser-1.1.0-mac.zip' \
+            dist/HLM-Browser-1.1.0-debug.apk \
+            dist/HLM-Browser-1.1.0-release-unsigned.apk \
+            dist/HLM-Browser-1.1.0-source.zip \
+            dist/SHA256SUMS-1.1.0
+          gh release edit v1.1.0 --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
