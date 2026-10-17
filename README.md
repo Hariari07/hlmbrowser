@@ -4,6 +4,8 @@ A dedicated browser with a device-configured website, exact-origin allowlist, pe
 
 **Status:** working Electron desktop implementation and a native Android implementation with material limitations. This is not yet a completed four-platform security qualification. Android WebView cannot enforce every network channel; Camera/microphone and approved pop-ups are IT-controlled; media requires HTTPS and OS consent. Native Android permissions, pop-ups and downloads need device testing. The supplied private HTTP site could not be reached through the cloud proxy. See [validation](docs/validation.md) before deployment.
 
+Desktop 1.1.1 fixes Chromium LAN permission handling for approved sites and reports blocked API/script origins in the status bar. See [LAN troubleshooting](docs/lan-troubleshooting.md). The existing macOS and Android downloads remain version 1.1.0.
+
 ## Architecture
 
 Windows, Linux and macOS share `desktop/`, using Electron's bundled Chromium rather than the user's installed Chrome. A sandboxed `WebContentsView` displays the website. A separate trusted renderer displays setup, administrator settings, loading status and recovery. Only that renderer receives a narrow IPC bridge. The main process owns settings, password verification, navigation and request policy. The UI has no address bar, back or forward controls.
@@ -28,19 +30,19 @@ Corporate proxies: Node 24 supports `NODE_USE_ENV_PROXY=1`; preserve TLS validat
 
 ### Windows
 
-Run the commands above on Windows, then `npm run dist:windows`. The NSIS installer is written to `dist/HLM Browser Setup 1.1.0.exe`. It supports choosing the installation directory, a desktop shortcut, and launching after installation. The build is unsigned unless your release infrastructure supplies an Authenticode certificate. Windows may show an untrusted-publisher warning for unsigned artifacts. Test installation, upgrade and uninstall on Windows before distributing.
+Run the commands above on Windows, then `npm run dist:windows`. The NSIS installer is written to `dist/HLM Browser Setup 1.1.1.exe`. It supports choosing the installation directory, a desktop shortcut, and launching after installation. The build is unsigned unless your release infrastructure supplies an Authenticode certificate. Windows may show an untrusted-publisher warning for unsigned artifacts. Test installation, upgrade and uninstall on Windows before distributing.
 
 The installer generated in this cloud environment uses the standalone fallback described in [release procedures](docs/releases.md), because Wine could not run. It installs per user in `%LOCALAPPDATA%/Programs/HLM Browser`, provides shortcuts and uninstall, and offers optional launch. It does not offer a directory chooser. It has compiled successfully but has not been installed on Windows.
 
 ### Linux
 
-Run `npm run dist:linux`. Outputs: `dist/HLM Browser-1.1.0.AppImage` and `dist/hlm-browser_1.1.0_amd64.deb`.
+Run `npm run dist:linux`. Outputs: `dist/HLM Browser-1.1.1.AppImage` and `dist/hlm-browser_1.1.1_amd64.deb`.
 
 ```sh
-chmod +x 'HLM Browser-1.1.0.AppImage'
-./'HLM Browser-1.1.0.AppImage'
+chmod +x 'HLM Browser-1.1.1.AppImage'
+./'HLM Browser-1.1.1.AppImage'
 # Debian/Ubuntu; installing system packages requires administrator privileges:
-sudo apt install ./hlm-browser_1.1.0_amd64.deb
+sudo apt install ./hlm-browser_1.1.1_amd64.deb
 ```
 
 AppImage may require FUSE 2; where unavailable, extract using `--appimage-extract` and run `squashfs-root/AppRun`. A supported kernel user-namespace sandbox or a correctly installed system sandbox is required. Do not turn the sandbox off. DEB installs the application and desktop entry. Other distributions need compatible GTK/NSS/glibc libraries; these artifacts were built on Debian 13 and are not claimed to support every older distribution.
@@ -76,4 +78,4 @@ Keep secrets out of configured URLs: a URL and its query string are persistent c
 
 ## Tests and releases
 
-`npm test` runs policy and persistent-store tests. `npm run test:desktop` launches real Electron with local HTTP fixtures and a disposable profile, verifying first setup, restart persistence, cookies/local storage, opener-based sign-in pop-ups, upload/download, IT settings changes, request/navigation blocking, isolation, full screen and network failure. [Manual checklist](docs/validation.md) covers installation, upgrades, platform features and real application compatibility. [Release procedures](docs/releases.md) cover controlled engine updates, signing and rollback. Selected version 1.1.0 distribution packages and checksums are committed under `dist/`; binary packages use Git LFS. Build working directories and dependencies remain ignored. Install Git LFS and run `git lfs pull` after cloning to retrieve the binaries.
+`npm test` runs policy and persistent-store tests. `npm run test:desktop` launches real Electron with local HTTP fixtures and a disposable profile, verifying first setup, restart persistence, cookies/local storage, opener-based sign-in pop-ups, upload/download, IT settings changes, request/navigation blocking, isolation, full screen and network failure. [Manual checklist](docs/validation.md) covers installation, upgrades, platform features and real application compatibility. [Release procedures](docs/releases.md) cover controlled engine updates, signing and rollback. Selected version 1.1.0 packages and version 1.1.1 Windows/Linux fixes with checksums are committed under `dist/`; binary packages use Git LFS. Build working directories and dependencies remain ignored. Install Git LFS and run `git lfs pull` after cloning to retrieve the binaries.

@@ -42,5 +42,9 @@ function mediaAllowed(origin, types, config) {
   if (!allowed(origin, config) || new URL(origin).protocol !== 'https:' || !Array.isArray(types) || !types.length) return false;
   return types.every(type => (type === 'video' && config.capabilities?.camera === true) || (type === 'audio' && config.capabilities?.microphone === true));
 }
+function networkPermissionAllowed(permission, documentURL, requestingURL, config) {
+  return ['local-network', 'local-network-access', 'loopback-network'].includes(permission) &&
+    allowed(documentURL, config) && allowed(requestingURL, config);
+}
 function popupAllowed(url, config) { return config?.capabilities?.popups === true && (url === 'about:blank' || allowed(url, config)); }
-module.exports = { parseURL, validateConfig, allowed, mediaAllowed, popupAllowed };
+module.exports = { parseURL, validateConfig, allowed, mediaAllowed, networkPermissionAllowed, popupAllowed };

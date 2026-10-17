@@ -76,11 +76,15 @@ const assert = require('node:assert/strict');
   try {
     let shell = await launch(true);
     let site = await sitePage();
+    for (const name of ['local-network', 'local-network-access', 'loopback-network']) {
+      assert.equal(await site.evaluate(async name => (await navigator.permissions.query({ name })).state, name), 'granted');
+    }
+    await shell.locator('#status').filter({ hasText: `Blocked application request to http://127.0.0.1:${forbidden.address().port}` }).waitFor();
     assert.equal(await site.evaluate(() => typeof window.hlm), 'undefined');
     assert.equal(await site.evaluate(() => typeof require), 'undefined');
     assert.equal(hits, 0);
     await close(); shell = await launch(); site = await sitePage(); assert.equal(hits, 0); await close();
-    console.log('PASS: packaged executable startup, setup, website loading, renderer isolation, request blocking and restart persistence with Chromium sandbox enabled.');
+    console.log('PASS: packaged executable startup, setup, LAN permissions, blocked-request diagnostics, website loading, renderer isolation, request blocking and restart persistence with Chromium sandbox enabled.');
   } finally {
     if (child) child.kill(); if (browser) await browser.close().catch(() => {}); server.close(); forbidden.close(); fs.rmSync(temp, { recursive: true, force: true });
   }

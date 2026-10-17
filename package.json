@@ -1,6 +1,6 @@
 {
   "name": "hlm-browser",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A configurable, origin-restricted application browser",
   "desktopName": "hlm-browser.desktop",
   "author": "HLM Browser contributors",

@@ -12,7 +12,11 @@ const { once } = require('node:events');
   const forbidden = http.createServer((_q, r) => { forbiddenHits++; r.end('Must never receive requests'); });
   forbidden.listen(0, '127.0.0.1'); await once(forbidden, 'listening');
   const evil = `http://127.0.0.1:${forbidden.address().port}`;
-  const authentication = http.createServer((_q, r) => { r.setHeader('Content-Type', 'text/html'); r.end(`<h1>Approved authentication fixture</h1><button id="finish">Complete sign-in</button><script>document.getElementById('finish').onclick=()=>{window.opener.postMessage('fixture-login-complete','*');window.close();};</script>`); });
+  const authentication = http.createServer((_q, r) => {
+    if (_q.url === '/api/records') {
+      r.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': origin });
+      r.end(JSON.stringify({ records: [{ id: 1, name: 'Backend fixture record' }] })); return;
+    } r.setHeader('Content-Type', 'text/html'); r.end(`<h1>Approved authentication fixture</h1><button id="finish">Complete sign-in</button><script>document.getElementById('finish').onclick=()=>{window.opener.postMessage('fixture-login-complete','*');window.close();};</script>`); });
   authentication.listen(0, '127.0.0.1'); await once(authentication, 'listening');
   const authOrigin = `http://127.0.0.1:${authentication.address().port}`;
   const server = http.createServer((q, r) => {
@@ -20,7 +24,7 @@ const { once } = require('node:events');
     if (q.url === '/upload' && q.method === 'POST') { q.on('data', data => { uploadBody += data; }); q.on('end', () => r.end('upload-received')); return; }
     if (q.url === '/download') { r.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="fixture.txt"' }); r.end('download fixture contents'); return; }
     r.setHeader('Content-Type', 'text/html');
-    r.end(`<h1>Application fixture</h1><a href="/route">Internal route</a><a href="${evil}">External link</a><a href="${evil}" target="_blank">External popup</a><button id="sign-in">Sign in</button><form id="upload-form"><input id="upload" name="document" type="file"></form><a href="/download" download>Download fixture</a><img src="${evil}/pixel"><script>window.cookieBefore=document.cookie;document.cookie='fixture-session=retained; Max-Age=3600; SameSite=Lax';window.storageBefore=localStorage.getItem('fixture-state');localStorage.setItem('fixture-state','retained');document.getElementById('sign-in').onclick=()=>window.open('${authOrigin}/login','hlm-sign-in');window.addEventListener('message',e=>{if(e.origin==='${authOrigin}')window.authResult=e.data;});fetch('${evil}/api').catch(()=>{});window.bridgePresent=typeof window.hlm!=='undefined';window.nodePresent=typeof require!=='undefined';</script>`);
+    r.end(`<h1>Application fixture</h1><a href="/route">Internal route</a><a href="${evil}">External link</a><a href="${evil}" target="_blank">External popup</a><button id="sign-in">Sign in</button><form id="upload-form"><input id="upload" name="document" type="file"></form><a href="/download" download>Download fixture</a><img src="${evil}/pixel"><script>fetch('${authOrigin}/api/records').then(r=>r.json()).then(data=>window.apiRecords=data.records).catch(error=>window.apiError=error.message);window.cookieBefore=document.cookie;document.cookie='fixture-session=retained; Max-Age=3600; SameSite=Lax';window.storageBefore=localStorage.getItem('fixture-state');localStorage.setItem('fixture-state','retained');document.getElementById('sign-in').onclick=()=>window.open('${authOrigin}/login','hlm-sign-in');window.addEventListener('message',e=>{if(e.origin==='${authOrigin}')window.authResult=e.data;});fetch('${evil}/api').catch(()=>{});window.bridgePresent=typeof window.hlm!=='undefined';window.nodePresent=typeof require!=='undefined';</script>`);
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
@@ -49,6 +53,13 @@ const { once } = require('node:events');
     await shell.locator('#save').click();
     let site = await website();
     await site.getByRole('heading', { name: 'Application fixture' }).waitFor();
+    await site.waitForFunction(() => window.apiRecords || window.apiError);
+    assert.equal(await site.evaluate(() => window.apiError), undefined);
+    assert.deepEqual(await site.evaluate(() => window.apiRecords), [{ id: 1, name: 'Backend fixture record' }]);
+    for (const name of ['local-network', 'local-network-access', 'loopback-network']) {
+      assert.equal(await site.evaluate(async name => (await navigator.permissions.query({ name })).state, name), 'granted', `${name} must be granted to an approved website`);
+    }
+    assert.equal(await site.evaluate(async () => (await navigator.permissions.query({ name: 'geolocation' })).state), 'denied');
     assert.equal(await site.evaluate(() => window.bridgePresent), false);
     assert.equal(await site.evaluate(() => window.nodePresent), false);
     const popupPromise = app.context().waitForEvent('page', { predicate: page => page !== shell && page !== site });
@@ -113,7 +124,7 @@ const { once } = require('node:events');
     await shell.getByRole('button', { name: 'Settings', exact: true }).first().click();
     await shell.getByRole('button', { name: 'Return to application' }).click();
     await shell.getByRole('heading', { name: 'Unable to open your application' }).waitFor();
-    console.log('PASS: setup/restart, cookie and local-storage persistence, opener-preserving approved sign-in popup, popup revocation, upload/download, settings replacement, routes, blocked requests/links/popups/redirects, bridge isolation, administrator enforcement, full screen and network error.');
+    console.log('PASS: approved cross-origin API data on page startup, Chromium LAN permissions, unrelated permission denial, setup/restart, cookie and local-storage persistence, opener-preserving approved sign-in popup, popup revocation, upload/download, settings replacement, routes, blocked requests/links/popups/redirects, bridge isolation, administrator enforcement, full screen and network error.');
   } finally {
     if (app) await app.close();
     server.close(); forbidden.close(); authentication.close(); fs.rmSync(temporary, { recursive: true, force: true });

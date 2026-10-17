@@ -2,7 +2,7 @@
 const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, Menu, systemPreferences } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { allowed, validateConfig, mediaAllowed, popupAllowed } = require('./policy.cjs');
+const { allowed, validateConfig, mediaAllowed, networkPermissionAllowed, popupAllowed } = require('./policy.cjs');
 const { Store, passwordRecord, verify } = require('./store.cjs');
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
@@ -42,12 +42,16 @@ app.whenReady().then(async () => {
   const remote = session.fromPartition('persist:hlm-website');
   const websiteContents = new Set(), popupWindows = new Set();
   remote.setPermissionCheckHandler((contents, permission, origin, details) => {
+    // Chromium gates LAN/loopback traffic separately from the request allowlist.
+    // The requester must be approved; every destination still passes onBeforeRequest.
+    if (websiteContents.has(contents) && networkPermissionAllowed(permission, contents.getURL(), details.requestingUrl ?? origin, config())) return true;
     if (!websiteContents.has(contents) || permission !== 'media' || !allowed(contents.getURL(), config()) || !contents.getURL().startsWith('https:')) return false;
     const types = details.mediaType === 'unknown' || !details.mediaType
       ? [config()?.capabilities.camera && 'video', config()?.capabilities.microphone && 'audio'].filter(Boolean) : [details.mediaType];
     return mediaAllowed(details.securityOrigin ?? origin, types, config());
   });
   remote.setPermissionRequestHandler(async (contents, permission, callback, details) => {
+    if (websiteContents.has(contents) && networkPermissionAllowed(permission, contents.getURL(), details.requestingUrl, config())) { callback(true); return; }
     const before = config();
     const documentURL = contents.getURL();
     const origin = details.securityOrigin ?? details.requestingUrl;
@@ -74,7 +78,23 @@ app.whenReady().then(async () => {
     const result = dialog.showSaveDialogSync(win, { title: 'Save website download', defaultPath: path.basename(item.getFilename()) });
     if (result) item.setSavePath(result); else item.cancel();
   });
-  remote.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !allowed(details.url, config(), true) }));
+  remote.webRequest.onBeforeRequest((details, callback) => {
+    const cancel = !allowed(details.url, config(), true);
+    if (cancel && ['xhr', 'script', 'webSocket'].includes(details.resourceType)) {
+      let origin = 'an unsupported resource';
+      try { origin = new URL(details.url).origin; } catch {}
+      message = `Blocked application request to ${origin}. Ask IT to approve this exact origin in Settings.`;
+      update();
+    }
+    callback({ cancel });
+  });
+  remote.webRequest.onErrorOccurred(details => {
+    if (details.error === 'net::ERR_BLOCKED_BY_CLIENT' || !['xhr', 'script', 'webSocket'].includes(details.resourceType)) return;
+    let origin = 'the server';
+    try { origin = new URL(details.url).origin; } catch {}
+    message = `Application request failed: ${origin} (${details.error}). Ask IT to check connectivity, CORS and sign-in.`;
+    update();
+  });
   remote.on('select-usb-device', event => event.preventDefault());
   remote.on('select-hid-device', event => event.preventDefault());
   win = new BrowserWindow({ width: 1200, height: 800, minWidth: 480, minHeight: 400, title: 'HLM Browser',

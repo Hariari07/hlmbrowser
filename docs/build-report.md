@@ -1,4 +1,14 @@
-# Cloud build report — 2026-10-15
+# Cloud build report
+
+## Desktop LAN fix — 2026-10-17, version 1.1.1
+
+Windows x64 NSIS, Linux x64 AppImage/DEB and a source ZIP are available under `dist/`, with `SHA256SUMS-1.1.1`. The macOS and Android binaries below remain 1.1.0. This desktop update fixes unconditional denial of Chromium's local-network permissions for approved requesters, and shows blocked API/script origins and network failures in the status bar. The destination allowlist remains enforced.
+
+Validation: 12 policy/store unit tests passed; the real Electron functional test passed automatic cross-origin backend JSON loading, all three LAN permission queries, unrelated permission denial and existing security/functionality checks. The built Linux executable passed LAN permissions, blocked-request status reporting, renderer isolation, request blocking, setup and restart with Chromium sandboxing enabled. The Windows installer compiled with warnings treated as errors; native Windows installation remains untested.
+
+Both supplied LAN addresses were unreachable from this cloud environment (proxy HTTP 403, direct connections failed). The user's Angular application and backend were not tested, and no MySQL data was accessed or changed. This confirms a browser permission defect and its correction; it does not confirm that the live application's missing-data problem is resolved. See [LAN troubleshooting](lan-troubleshooting.md) for configuration and remaining evidence needed.
+
+## Original multi-platform build — 2026-10-15
 
 ## Produced
 

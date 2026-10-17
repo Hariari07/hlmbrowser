@@ -34,7 +34,7 @@ Section "Install"
   CreateShortcut "$SMPROGRAMS\HLM Browser\HLM Browser.lnk" "$INSTDIR\HLM Browser.exe"
   CreateShortcut "$DESKTOP\HLM Browser.lnk" "$INSTDIR\HLM Browser.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "DisplayName" "HLM Browser"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "DisplayVersion" "1.1.0"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "DisplayVersion" "1.1.1"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "UninstallString" '"$INSTDIR\Uninstall HLM Browser.exe"'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "InstallLocation" "$INSTDIR"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\HLM Browser" "NoModify" 1

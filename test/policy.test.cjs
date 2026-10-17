@@ -1,7 +1,20 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { allowed, validateConfig, parseURL, mediaAllowed, popupAllowed } = require('../desktop/policy.cjs');
+const { allowed, validateConfig, parseURL, mediaAllowed, networkPermissionAllowed, popupAllowed } = require('../desktop/policy.cjs');
 const base = { website: 'https://app.example/portal', origins: ['https://login.example'], allowHttp: false, fullscreen: false, autoOpen: true };
+test('LAN permissions require approved document and requester without approving other permissions or destinations', () => {
+  const c = validateConfig({ ...base, website: 'http://192.168.0.127:4200/fbs', origins: ['http://172.21.17.75:7896'], allowHttp: true });
+  for (const permission of ['local-network', 'local-network-access', 'loopback-network']) {
+    assert.equal(networkPermissionAllowed(permission, c.website, c.website, c), true);
+    assert.equal(networkPermissionAllowed(permission, c.website, 'http://evil.example', c), false);
+    assert.equal(networkPermissionAllowed(permission, 'http://evil.example', c.website, c), false);
+    assert.equal(networkPermissionAllowed(permission, c.website, undefined, c), false);
+    assert.equal(networkPermissionAllowed(permission, c.website, c.website, null), false);
+  }
+  for (const permission of ['media', 'geolocation', 'notifications', 'unknown']) assert.equal(networkPermissionAllowed(permission, c.website, c.website, c), false);
+  assert.equal(allowed('http://172.21.17.75:7896/api', c, true), true);
+  assert.equal(allowed('http://172.21.17.75:7897/api', c, true), false);
+});
 test('validates and canonicalizes configuration', () => {
   const c = validateConfig({ ...base, origins: ['https://LOGIN.example:443', 'https://login.example'] });
   assert.deepEqual(c.origins, ['https://login.example']);
